@@ -114,26 +114,24 @@ class CryptoUtil {
   // Encrypts the given source, with the given key and a randomly generated
   // nonce, using XChaCha20 (w Poly1305 MAC).
   // This function runs on the isolate pool held by `_computer`.
-  // TODO: Remove "ChaCha", an implementation detail from the function name
-  static Future<EncryptionResult> encryptChaCha(
+  static Future<EncryptionResult> encryptData(
     Uint8List source,
     Uint8List key,
   ) async {
     final args = <String, dynamic>{};
     args["source"] = source;
     args["key"] = key;
-    return chachaEncryptData(args);
-    // return _computer.compute(
-    //   chachaEncryptData,
-    //   param: args,
-    //   taskName: "encryptChaCha",
-    // );
+    // return chachaEncryptData(args);
+    return _computer.compute(
+      chachaEncryptData,
+      param: args,
+      taskName: "encryptData",
+    );
   }
 
   // Decrypts the given source, with the given key and header using XChaCha20
   // (w Poly1305 MAC).
-  // TODO: Remove "ChaCha", an implementation detail from the function name
-  static Future<Uint8List> decryptChaCha(
+  static Future<Uint8List> decryptData(
     Uint8List source,
     Uint8List key,
     Uint8List header,
@@ -145,7 +143,7 @@ class CryptoUtil {
     return _computer.compute(
       chachaDecryptData,
       param: args,
-      taskName: "decryptChaCha",
+      taskName: "encryptData",
     );
   }
 

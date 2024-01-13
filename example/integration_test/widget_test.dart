@@ -85,11 +85,11 @@ void main() {
   //   expect(plaintext, expectedPlaintext);
   // });
 
-  test('encryptChaCha', () async {
+  test('encryptSource', () async {
     final source = Uint8List.fromList('data'.codeUnits);
     final key = CryptoUtil.randomKey();
 
-    final encrypted = await CryptoUtil.encryptChaCha(source, key);
+    final encrypted = await CryptoUtil.encryptData(source, key);
     expect(encrypted.encryptedData, isNotNull);
   });
 }
