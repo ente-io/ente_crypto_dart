@@ -1,5 +1,3 @@
-import 'dart:typed_data';
-
 import 'package:ente_crypto_dart/ente_crypto_dart.dart';
 import 'package:flutter/material.dart';
 
@@ -35,24 +33,6 @@ class MyHomePage extends StatefulWidget {
 }
 
 class _MyHomePageState extends State<MyHomePage> {
-  func() async {
-    try {
-      final source = Uint8List.fromList('data'.codeUnits);
-      final key = CryptoUtil.randomKey();
-
-      final encrypted = await CryptoUtil.encryptData(source, key);
-      print(encrypted.encryptedData);
-    } catch (e) {
-      print(e);
-    }
-  }
-
-  @override
-  void initState() {
-    super.initState();
-    func();
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(

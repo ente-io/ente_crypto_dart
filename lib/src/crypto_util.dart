@@ -26,8 +26,7 @@ class CryptoUtil {
 
   static Future<void> init() async {
     try {
-      await SodiumWrapper.init();
-      sodium = SodiumWrapper.instance.sodium;
+      sodium = await SodiumWrapper.init();
     } catch (e) {
       log(e.toString());
     }
