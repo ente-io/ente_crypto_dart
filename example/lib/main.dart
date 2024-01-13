@@ -1,9 +1,11 @@
+import 'dart:typed_data';
+
 import 'package:ente_crypto_dart/ente_crypto_dart.dart';
 import 'package:flutter/material.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
-  CryptoUtil.init();
+  initCryptoUtil();
   runApp(const MyApp());
 }
 
@@ -33,9 +35,22 @@ class MyHomePage extends StatefulWidget {
 }
 
 class _MyHomePageState extends State<MyHomePage> {
+  func() async {
+    try {
+      final source = Uint8List.fromList('data'.codeUnits);
+      final key = CryptoUtil.randomKey();
+
+      final encrypted = await CryptoUtil.encryptData(source, key);
+      print(encrypted.encryptedData);
+    } catch (e) {
+      print(e);
+    }
+  }
+
   @override
   void initState() {
     super.initState();
+    func();
   }
 
   @override
@@ -50,7 +65,7 @@ class _MyHomePageState extends State<MyHomePage> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: <Widget>[
             Text(
-              CryptoUtil.decryptionChunkSize.toString(),
+              "Working? ${CryptoUtil.decryptionChunkSize == 4194321}",
               style: Theme.of(context).textTheme.displayMedium,
             ),
           ],
