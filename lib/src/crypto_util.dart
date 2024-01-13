@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io' as io;
+import 'dart:developer';
 import 'dart:typed_data';
 
 import 'package:computer/computer.dart';
@@ -10,6 +11,8 @@ import 'package:ente_crypto_dart/src/models/encryption_result.dart';
 import 'package:logging/logging.dart';
 import 'package:sodium/sodium_sumo.dart';
 import 'package:sodium_libs/sodium_libs.dart';
+
+export 'core/errors.dart';
 
 const int encryptionChunkSize = 4 * 1024 * 1024;
 const int hashChunkSize = 4 * 1024 * 1024;
@@ -25,8 +28,12 @@ class CryptoUtil {
   static final int decryptionChunkSize =
       encryptionChunkSize + sodium.crypto.secretStream.aBytes;
 
-  static init() async {
-    sodium = await SodiumPlatform.instance.loadSodiumSumo();
+  static Future<void> init() async {
+    try {
+      sodium = await SodiumPlatform.instance.loadSodiumSumo();
+    } catch (e) {
+      log(e.toString());
+    }
   }
 
   static Uint8List base642bin(String b64) {
@@ -57,7 +64,7 @@ class CryptoUtil {
   static EncryptionResult encryptSync(Uint8List source, Uint8List key) {
     final nonce = sodium.randombytes.buf(sodium.crypto.secretBox.nonceBytes);
 
-    final args = <String, dynamic>{};
+    final args = <String, Uint8List>{};
     args["source"] = source;
     args["nonce"] = nonce;
     args["key"] = key;
@@ -115,11 +122,12 @@ class CryptoUtil {
     final args = <String, dynamic>{};
     args["source"] = source;
     args["key"] = key;
-    return _computer.compute(
-      chachaEncryptData,
-      param: args,
-      taskName: "encryptChaCha",
-    );
+    return chachaEncryptData(args);
+    // return _computer.compute(
+    //   chachaEncryptData,
+    //   param: args,
+    //   taskName: "encryptChaCha",
+    // );
   }
 
   // Decrypts the given source, with the given key and header using XChaCha20
@@ -343,16 +351,25 @@ class CryptoUtil {
     );
   }
 
-  static Uint8List cryptoSecretboxEasy(Map<String, dynamic> args) {
-    return sodium.crypto.secretBox
-        .easy(message: args["source"], nonce: args["nonce"], key: args["key"]);
+  static Uint8List cryptoSecretboxEasy(Map<String, Uint8List> args) {
+    return sodium.crypto.secretBox.easy(
+        message: args["source"]!,
+        nonce: args["nonce"]!,
+        key: SecureKey.fromList(
+          sodium,
+          args["key"]!,
+        ));
+  }
+
+  static Uint8List randomKey([int length = 32]) {
+    return SecureKey.random(sodium, 32).extractBytes();
   }
 
   static Uint8List cryptoSecretboxOpenEasy(Map<String, dynamic> args) {
     return sodium.crypto.secretBox.openEasy(
-      cipherText: args["cipher"],
-      nonce: args["nonce"],
-      key: args["key"],
+      cipherText: args["cipher"]!,
+      nonce: args["nonce"]!,
+      key: SecureKey.fromList(sodium, args["key"]!),
     );
   }
 
@@ -360,10 +377,10 @@ class CryptoUtil {
     return sodium.crypto.pwhash
         .call(
           outLen: sodium.crypto.secretBox.keyBytes,
-          password: args["password"],
-          salt: args["salt"],
-          opsLimit: args["opsLimit"],
-          memLimit: args["memLimit"],
+          password: Int8List.view((args["password"] as Uint8List).buffer),
+          salt: args["salt"] as Uint8List,
+          opsLimit: args["opsLimit"] as int,
+          memLimit: args["memLimit"] as int,
           alg: CryptoPwhashAlgorithm.argon2id13,
         )
         .extractBytes();
@@ -410,21 +427,21 @@ class CryptoUtil {
   static Future<EncryptionResult> chachaEncryptData(
     Map<String, dynamic> args,
   ) async {
-    final initPushResult = sodium.crypto.secretStream.createPushEx(args["key"]);
-    final stream = Stream.value(
-      SecretStreamPlainMessage(
-        args["source"],
-        tag: SecretStreamMessageTag.finalPush,
-      ),
-    );
-    initPushResult.bind(stream);
-    final encryptedData = sodium.crypto.secretStream.pushEx(
-      key: SecureKey.fromList(sodium, args["key"]),
-      messageStream: stream,
-    );
+    final initPushResult = await sodium.crypto.secretStream
+        .pushEx(
+          key: SecureKey.fromList(sodium, args["key"]!),
+          messageStream: Stream.value(
+            SecretStreamPlainMessage(
+              args["source"]!,
+              tag: SecretStreamMessageTag.finalPush,
+            ),
+          ),
+        )
+        .first;
+
     return EncryptionResult(
-      encryptedData: (await encryptedData.first).additionalData,
-      header: (await encryptedData.first).additionalData,
+      encryptedData: initPushResult.message,
+      header: initPushResult.additionalData,
     );
   }
 
@@ -442,8 +459,6 @@ class CryptoUtil {
     final inputFile = sourceFile.openSync(mode: io.FileMode.read);
     final key = args["key"] ?? sodium.crypto.secretStream.keygen();
 
-    final initPushResult = sodium.crypto.secretStream
-        .createPushEx(SecureKey.fromList(sodium, key));
     var bytesRead = 0;
     var tag = SecretStreamMessageTag.message;
     late SecretExStream<SecretStreamCipherMessage> encryptedData;
@@ -456,13 +471,11 @@ class CryptoUtil {
       final buffer = await inputFile.read(chunkSize);
       bytesRead += chunkSize;
       final s = Stream.value(SecretStreamPlainMessage(buffer, tag: tag));
-      encryptedData = sodium.crypto.secretStream.pushEx(
-        key: SecureKey.fromList(sodium, key),
-        messageStream: s,
-      );
-      initPushResult.bind(s);
+      encryptedData = sodium.crypto.secretStream
+          .pushEx(key: SecureKey.fromList(sodium, key), messageStream: s);
+      final pushResult = await encryptedData.first;
       await destinationFile.writeAsBytes(
-        (await encryptedData.first).additionalData!.toList(),
+        pushResult.message,
         mode: io.FileMode.append,
       );
     }
