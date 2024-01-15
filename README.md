@@ -1,39 +1,30 @@
-<!--
-This README describes the package. If you publish this package to pub.dev,
-this README's contents appear on the landing page for your package.
-
-For information about how to write a good package README, see the guide for
-[writing package pages](https://dart.dev/guides/libraries/writing-package-pages).
-
-For general information about developing packages, see the Dart guide for
-[creating packages](https://dart.dev/guides/libraries/create-library-packages)
-and the Flutter guide for
-[developing packages and plugins](https://flutter.dev/developing-packages).
--->
-
-TODO: Put a short description of the package here that helps potential users
-know whether this package might be useful for them.
-
-## Features
-
-TODO: List what your package can do. Maybe include images, gifs, or videos.
+# ente_crypto_dart
+The core of the ente's crypto library.
 
 ## Getting started
 
-TODO: List prerequisites and provide or point to information on how to
-start using the package.
+- Import the package
+```dart
+import 'package:ente_crypto_dart/ente_crypto_dart.dart';
+```
+- Call the following inside the main function
+```dart
+WidgetsFlutterBinding.ensureInitialized();
+initCryptoUtil();
+```
+- Just start consuming the CryptoUtil class, see usage below
 
 ## Usage
 
-TODO: Include short and useful examples for package users. Add longer examples
-to `/example` folder.
-
 ```dart
-const like = 'sample';
+import 'package:ente_crypto_dart/ente_crypto_dart.dart';
+
+const utf8Str = CryptoUtil.strToBin("Hello");
+const decryptionChunk = CryptoUtil.decryptionChunkSize;
 ```
 
 ## Additional information
 
-TODO: Tell users more about the package: where to find more information, how to
-contribute to the package, how to file issues, what response they can expect
-from the package authors, and more.
+This library is made by Ente.io developers and used in auth and photos app.
+
+This is GPL-3.0 Licensed and wouldn't be possible without `libsodium` library and the `sodium` dart package.
