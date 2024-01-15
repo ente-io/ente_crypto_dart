@@ -23,8 +23,8 @@ final utf8Str = CryptoUtil.strToBin("Hello");
 final decryptionChunk = CryptoUtil.decryptionChunkSize;
 ```
 
-## Integration tests:
-Use the Following command for running them from the root directory of this project.
+## Integration tests
+Use the Following command for running them from the example directory of this project.
 ```bash
 flutter test integration_test --dart-define=PWD=$(PWD) 
 ```
