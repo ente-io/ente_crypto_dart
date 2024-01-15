@@ -19,8 +19,8 @@ initCryptoUtil();
 ```dart
 import 'package:ente_crypto_dart/ente_crypto_dart.dart';
 
-const utf8Str = CryptoUtil.strToBin("Hello");
-const decryptionChunk = CryptoUtil.decryptionChunkSize;
+final utf8Str = CryptoUtil.strToBin("Hello");
+final decryptionChunk = CryptoUtil.decryptionChunkSize;
 ```
 
 ## Additional information
