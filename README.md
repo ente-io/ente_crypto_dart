@@ -23,6 +23,12 @@ final utf8Str = CryptoUtil.strToBin("Hello");
 final decryptionChunk = CryptoUtil.decryptionChunkSize;
 ```
 
+## Integration tests:
+Use the Following command for running them from the root directory of this project.
+```bash
+flutter test integration_test --dart-define=PWD=$(PWD) 
+```
+
 ## Additional information
 
 This library is made by Ente.io developers and used in auth and photos app.
