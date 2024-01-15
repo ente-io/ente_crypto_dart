@@ -8,9 +8,10 @@ import 'package:ente_crypto_dart/src/core/errors.dart';
 import 'package:ente_crypto_dart/src/models/derived_key_result.dart';
 import 'package:ente_crypto_dart/src/models/device_info.dart';
 import 'package:ente_crypto_dart/src/models/encryption_result.dart';
-import 'package:ente_crypto_dart/src/sodium_wrapper.dart';
 import 'package:logging/logging.dart';
+import 'package:rxdart/rxdart.dart';
 import 'package:sodium/sodium_sumo.dart';
+import 'package:sodium_libs/sodium_libs.dart';
 
 export 'core/errors.dart';
 
@@ -27,7 +28,7 @@ class CryptoUtil {
 
   static Future<void> init() async {
     try {
-      sodium = await SodiumWrapper.init();
+      sodium = await SodiumPlatform.instance.loadSodiumSumo();
     } catch (e) {
       log(e.toString());
     }
@@ -57,11 +58,6 @@ class CryptoUtil {
     );
   }
 
-  // Encrypts the given source, with the given key and a randomly generated
-  // nonce, using XSalsa20 (w Poly1305 MAC).
-  // This function runs on the same thread as the caller, so should be used only
-  // for small amounts of data where thread switching can result in a degraded
-  // user experience
   static EncryptionResult encryptSync(Uint8List source, Uint8List key) {
     final nonce = sodium.randombytes.buf(sodium.crypto.secretBox.nonceBytes);
 
@@ -73,8 +69,6 @@ class CryptoUtil {
     );
   }
 
-  // Decrypts the given cipher, with the given key and nonce using XSalsa20
-  // (w Poly1305 MAC).
   static Future<Uint8List> decrypt(
     Uint8List cipher,
     Uint8List key,
@@ -86,11 +80,6 @@ class CryptoUtil {
     );
   }
 
-  // Decrypts the given cipher, with the given key and nonce using XSalsa20
-  // (w Poly1305 MAC).
-  // This function runs on the same thread as the caller, so should be used only
-  // for small amounts of data where thread switching can result in a degraded
-  // user experience
   static Uint8List decryptSync(
     Uint8List cipher,
     Uint8List key,
@@ -99,9 +88,6 @@ class CryptoUtil {
     return cryptoSecretboxOpenEasy(cipher, key, nonce, sodium);
   }
 
-  // Encrypts the given source, with the given key and a randomly generated
-  // nonce, using XChaCha20 (w Poly1305 MAC).
-  // This function runs on the isolate pool held by `_computer`.
   static Future<EncryptionResult> encryptData(
     Uint8List source,
     Uint8List key,
@@ -111,21 +97,15 @@ class CryptoUtil {
     );
   }
 
-  // Decrypts the given source, with the given key and header using XChaCha20
-  // (w Poly1305 MAC).
   static Future<Uint8List> decryptData(
     Uint8List source,
     Uint8List key,
-    Uint8List? header,
+    Uint8List header,
   ) async {
     return await sodium.runIsolated((sodium, secureKeys, keyPairs) =>
         chachaDecryptData(source, key, header, sodium));
   }
 
-  // Encrypts the file at sourceFilePath, with the key (if provided) and a
-  // randomly generated nonce using XChaCha20 (w Poly1305 MAC), and writes it
-  // to the destinationFilePath.
-  // If a key is not provided, one is generated and returned.
   static Future<EncryptionResult> encryptFile(
     String sourceFilePath,
     String destinationFilePath, {
@@ -135,8 +115,6 @@ class CryptoUtil {
         chachaEncryptFile(sourceFilePath, destinationFilePath, key, sodium));
   }
 
-  // Decrypts the file at sourceFilePath, with the given key and header using
-  // XChaCha20 (w Poly1305 MAC), and writes it to the destinationFilePath.
   static Future<void> decryptFile(
     String sourceFilePath,
     String destinationFilePath,
@@ -149,23 +127,18 @@ class CryptoUtil {
     );
   }
 
-  // Generates and returns a 256-bit key.
   static Uint8List generateKey() {
     return sodium.crypto.secretBox.keygen().extractBytes();
   }
 
-  // Generates and returns a random byte buffer of length
-  // crypto_pwhash_SALTBYTES (16)
   static Uint8List getSaltToDeriveKey() {
     return sodium.randombytes.buf(sodium.crypto.pwhash.saltBytes);
   }
 
-  // Generates and returns a secret key and the corresponding public key.
   static KeyPair generateKeyPair() {
     return sodium.crypto.box.keyPair();
   }
 
-  // Decrypts the input using the given publicKey-secretKey pair
   static Uint8List openSealSync(
     Uint8List input,
     Uint8List publicKey,
@@ -178,19 +151,10 @@ class CryptoUtil {
     );
   }
 
-  // Encrypts the input using the given publicKey
   static Uint8List sealSync(Uint8List input, Uint8List publicKey) {
     return sodium.crypto.box.seal(message: input, publicKey: publicKey);
   }
 
-  // Derives a key for a given password and salt using Argon2id, v1.3.
-  // The function first attempts to derive a key with both memLimit and opsLimit
-  // set to their Sensitive variants.
-  // If this fails, say on a device with insufficient RAM, we retry by halving
-  // the memLimit and doubling the opsLimit, while ensuring that we stay within
-  // the min and max limits for both parameters.
-  // At all points, we ensure that the product of these two variables (the area
-  // under the graph that determines the amount of work required) is a constant.
   static Future<DerivedKeyResult> deriveSensitiveKey(
     Uint8List password,
     Uint8List salt,
@@ -200,19 +164,11 @@ class CryptoUtil {
     int opsLimit = sodium.crypto.pwhash.opsLimitSensitive;
     if (await isLowSpecDevice()) {
       logger.info("low spec device detected");
-      // When sensitive memLimit (1 GB) is used, on low spec device the OS might
-      // kill the app with OOM. To avoid that, start with 256 MB and
-      // corresponding ops limit (16).
-      // This ensures that the product of these two variables
-      // (the area under the graph that determines the amount of work required)
-      // stays the same
-      // SODIUM_CRYPTO_PWHASH_MEMLIMIT_SENSITIVE: 1073741824
-      // SODIUM_CRYPTO_PWHASH_MEMLIMIT_MODERATE: 268435456
-      // SODIUM_CRYPTO_PWHASH_OPSLIMIT_SENSITIVE: 4
+
       memLimit = sodium.crypto.pwhash.memLimitModerate;
       final factor = sodium.crypto.pwhash.memLimitSensitive ~/
-          sodium.crypto.pwhash.memLimitModerate; // = 4
-      opsLimit = opsLimit * factor; // = 16
+          sodium.crypto.pwhash.memLimitModerate;
+      opsLimit = opsLimit * factor;
     }
     Uint8List key;
     while (memLimit >= sodium.crypto.pwhash.memLimitMin &&
@@ -233,11 +189,6 @@ class CryptoUtil {
     throw UnsupportedError("Cannot perform this operation on this device");
   }
 
-  // Derives a key for the given password and salt, using Argon2id, v1.3
-  // with memory and ops limit hardcoded to their Interactive variants
-  // NOTE: This is only used while setting passwords for shared links, as an
-  // extra layer of authentication (atop the access token and collection key).
-  // More details @ https://ente.io/blog/building-shareable-links/
   static Future<DerivedKeyResult> deriveInteractiveKey(
     Uint8List password,
     Uint8List salt,
@@ -248,8 +199,6 @@ class CryptoUtil {
     return DerivedKeyResult(key, memLimit, opsLimit);
   }
 
-  // Derives a key for a given password, salt, memLimit and opsLimit using
-  // Argon2id, v1.3.
   static Future<Uint8List> deriveKey(
     Uint8List password,
     Uint8List salt,
@@ -269,9 +218,6 @@ class CryptoUtil {
     }
   }
 
-  // derives a Login key as subKey from the given key by applying KDF
-  // (Key Derivation Function) with the `loginSubKeyId` and
-  // `loginSubKeyLen` and `loginSubKeyContext` as context
   static Future<Uint8List> deriveLoginKey(
     Uint8List key,
   ) async {
@@ -280,7 +226,7 @@ class CryptoUtil {
         (sodium, secureKeys, keyPairs) => cryptoKdfDeriveFromKey(
             key, loginSubKeyId, loginSubKeyLen, loginSubKeyContext, sodium),
       );
-      // return the first 16 bytes of the derived key
+
       return derivedKey.sublist(0, 16);
     } catch (e, s) {
       Logger("deriveLoginKey").severe("loginKeyDerivation failed", e, s);
@@ -288,7 +234,6 @@ class CryptoUtil {
     }
   }
 
-  // Computes and returns the hash of the source file
   static Future<Uint8List> getHash(io.File source) {
     return sodium.runIsolated(
       (sodium, secureKeys, keyPairs) => cryptoGenericHash(source.path, sodium),
@@ -348,7 +293,6 @@ class CryptoUtil {
         .extractBytes();
   }
 
-// Returns the hash for a given file, chunking it in batches of hashChunkSize
   static Future<Uint8List> cryptoGenericHash(
       String sourceFilePath, Sodium sodium) async {
     final sourceFile = io.File(sourceFilePath);
@@ -378,27 +322,22 @@ class CryptoUtil {
       Uint8List source, Uint8List key, Sodium sodium) async {
     StreamController<Uint8List> controller = StreamController();
 
-    List<int> encBytes = [];
-
-    final s = sodium.crypto.secretStream.push(
-      messageStream: controller.stream,
-      key: SecureKey.fromList(sodium, key),
+    final s = sodium.crypto.secretStream.createPush(
+      SecureKey.fromList(sodium, key),
     );
 
     controller.add(source);
+    final res = s.bind(controller.stream);
     controller.close();
 
-    final values = await s.toList();
-    for (var value in values) {
-      encBytes.addAll(value);
-    }
-
+    List<Uint8List> encBytes = await res.toList();
     return EncryptionResult(
-      encryptedData: Uint8List.fromList(encBytes),
+      encryptedData: encBytes[1],
+      header: encBytes[0],
+      nonce: encBytes[2],
     );
   }
 
-// Encrypts a given file, in chunks of encryptionChunkSize
   static Future<EncryptionResult> chachaEncryptFile(
     String sourceFilePath,
     String destinationFilePath,
@@ -413,31 +352,33 @@ class CryptoUtil {
     logger.info("Encrypting file of size $sourceFileLength");
 
     final inputFile = sourceFile.openSync(mode: io.FileMode.read);
-    final key = skey ?? sodium.crypto.secretStream.keygen().extractBytes();
+    final key = SecureKey.fromList(
+        sodium, skey ?? sodium.crypto.secretStream.keygen().extractBytes());
 
-    var bytesRead = 0;
-    var tag = SecretStreamMessageTag.message;
     final controller = StreamController<Uint8List>();
     final encryptedData = sodium.crypto.secretStream.push(
-      key: SecureKey.fromList(sodium, key),
+      key: key,
       messageStream: controller.stream,
     );
-    while (tag != SecretStreamMessageTag.finalPush) {
-      var chunkSize = encryptionChunkSize;
-      if (bytesRead + chunkSize >= sourceFileLength) {
-        chunkSize = sourceFileLength - bytesRead;
-        tag = SecretStreamMessageTag.finalPush;
-      }
-      final buffer = await inputFile.read(chunkSize);
-      bytesRead += chunkSize;
 
-      controller.add(buffer);
-      final pushResult = await encryptedData.last;
-      await destinationFile.writeAsBytes(
-        pushResult,
-        mode: io.FileMode.append,
-      );
-    }
+    StreamController<Uint8List> consumer = StreamController();
+    final Stream<List<int>> source = sourceFile
+        .openRead()
+        .expand((bytes) => bytes)
+        .bufferCount(encryptionChunkSize);
+    await source
+        .map<Uint8List>((chunk) {
+          return Uint8List.fromList(chunk);
+        })
+        .transform(sodium.crypto.secretStream.createPush(key))
+        .pipe(consumer);
+
+    final destinationFileSink = destinationFile.openWrite();
+    await consumer.stream.forEach((chunk) {
+      destinationFileSink.add(chunk);
+    });
+    await destinationFileSink.close();
+    await consumer.close();
     await inputFile.close();
 
     logger.info(
@@ -445,7 +386,7 @@ class CryptoUtil {
     );
 
     return EncryptionResult(
-      key: key,
+      key: key.extractBytes(),
       header: await encryptedData.first,
     );
   }
@@ -464,34 +405,26 @@ class CryptoUtil {
     logger.info("Decrypting file of size $sourceFileLength");
 
     final inputFile = sourceFile.openSync(mode: io.FileMode.read);
-    final pullState = await sodium.crypto.secretStream
-        .pull(
-          cipherStream: Stream.value(header),
-          key: SecureKey.fromList(sodium, key),
-        )
-        .first;
 
-    var bytesRead = 0;
-    var tag = SecretStreamMessageTag.message;
-    while (tag != SecretStreamMessageTag.finalPush) {
-      var chunkSize = decryptionChunkSize;
-      if (bytesRead + chunkSize >= sourceFileLength) {
-        chunkSize = sourceFileLength - bytesRead;
-      }
-      final buffer = await inputFile.read(chunkSize);
-      bytesRead += chunkSize;
-      final pullResult = await sodium.crypto.secretStream
-          .pullEx(
-            key: SecureKey.fromList(sodium, pullState),
-            cipherStream: Stream.value(SecretStreamCipherMessage(buffer)),
-          )
-          .first;
-      await destinationFile.writeAsBytes(
-        pullResult.message,
-        mode: io.FileMode.append,
-      );
-      tag = pullResult.tag;
-    }
+    final consumer = StreamController<List<int>>();
+
+    final Stream<List<int>> source = sourceFile
+        .openRead()
+        .expand((bytes) => bytes)
+        .bufferCount(100 + sodium.crypto.secretStream.aBytes);
+    await source
+        .map<Uint8List>((chunk) => Uint8List.fromList(chunk))
+        .transform(sodium.crypto.secretStream
+            .createPull(SecureKey.fromList(sodium, key)))
+        .cast<List<int>>()
+        .pipe(consumer);
+
+    final destinationFileSink = destinationFile.openWrite();
+    await consumer.stream.forEach((chunk) {
+      destinationFileSink.add(chunk);
+    });
+    await destinationFileSink.close();
+    await consumer.close();
     inputFile.closeSync();
 
     logger.info(
@@ -500,26 +433,20 @@ class CryptoUtil {
   }
 
   static Future<Uint8List> chachaDecryptData(
-      Uint8List source, Uint8List key, Uint8List? header, Sodium sodium) async {
+      Uint8List source, Uint8List key, Uint8List header, Sodium sodium) async {
     StreamController<Uint8List> controller = StreamController();
 
-    List<int> decBytes = [];
+    final s = sodium.crypto.secretStream
+        .createPull(SecureKey.fromList(sodium, key), requireFinalized: false);
+    final res = s.bind(controller.stream);
 
-    final s = sodium.crypto.secretStream.pull(
-        cipherStream: controller.stream, key: SecureKey.fromList(sodium, key));
-
-    final encryptedLength = source.length;
-    controller.add(source.sublist(0, 24));
-    controller.add(source.sublist(24, encryptedLength - 17));
-    controller.add(source.sublist(encryptedLength - 17));
+    controller.add(header);
+    controller.add(source);
 
     controller.close();
 
-    final values = await s.toList();
-    for (var value in values) {
-      decBytes.addAll(value);
-    }
-
-    return Uint8List.fromList(decBytes);
+    return (await res.toList()).reduce((a, b) => Uint8List.fromList(
+          a.toList()..addAll(b.toList()),
+        ));
   }
 }

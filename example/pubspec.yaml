@@ -16,6 +16,7 @@ dependencies:
   sodium_libs:
   integration_test:
     sdk: flutter
+  logging: ^1.2.0
 
 dev_dependencies:
   flutter_test:
