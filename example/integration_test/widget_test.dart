@@ -4,16 +4,11 @@ import 'dart:typed_data';
 import 'package:ente_crypto_dart/ente_crypto_dart.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
-import 'package:sodium_libs/sodium_libs.dart';
 
 void main() async {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
   await CryptoUtil.init();
 
-  test('verify consts', () async {
-    // Load app widget.
-    expect(CryptoUtil.decryptionChunkSize, 4194321);
-  });
   test('decodes base64 string to Uint8List', () {
     const b64 = 'aGVsbG8gd29ybGQ=';
     final expectedBin = CryptoUtil.strToBin('hello world');
@@ -39,14 +34,14 @@ void main() async {
       'encrypts data with a randomly generated nonce and returns an EncryptionResult',
       () async {
     final source = CryptoUtil.strToBin('Hello, world!');
-    final key = SecureKey.random(sodium, sodium.crypto.secretBox.keyBytes);
+    final key = CryptoUtil.randomKey();
 
-    final encryptionResult = CryptoUtil.encryptSync(source, key.extractBytes());
+    final encryptionResult = CryptoUtil.encryptSync(source, key);
 
     // Assertions
     expect(encryptionResult, isNotNull);
     expect(encryptionResult.encryptedData, isNotEmpty);
-    expect(encryptionResult.key, equals(key.extractBytes()));
+    expect(encryptionResult.key, equals(key));
     expect(encryptionResult.nonce?.length,
         equals(sodium.crypto.secretBox.nonceBytes));
   });
@@ -63,15 +58,14 @@ void main() async {
   test('Decrypts cipher with valid key and nonce', () async {
     // Sample data
     final source = CryptoUtil.strToBin('Hello, world!');
-    final key = SecureKey.random(sodium, sodium.crypto.secretBox.keyBytes);
+    final key = CryptoUtil.randomKey();
 
-    final encryptionResult = CryptoUtil.encryptSync(source, key.extractBytes());
+    final encryptionResult = CryptoUtil.encryptSync(source, key);
     final cipher = encryptionResult.encryptedData;
 
     final nonce = encryptionResult.nonce;
 
-    final plaintext =
-        await CryptoUtil.decrypt(cipher!, key.extractBytes(), nonce!);
+    final plaintext = await CryptoUtil.decrypt(cipher!, key, nonce!);
 
     expect(plaintext, source);
   });
@@ -231,39 +225,42 @@ void main() async {
         throwsA(isA<FileSystemException>()));
   });
 
-  // test('Encrypts a file successfully', () async {
-  //   // Set up test data
-  //   const staticPath = String.fromEnvironment('PWD');
+  test('Encrypts a file successfully', () async {
+    // Set up test data
+    const staticPath = String.fromEnvironment('PWD');
 
-  //   const sourceFilePath = '$staticPath/test_data/source.txt';
-  //   const destinationFilePath = '$staticPath/test_data/encrypted.txt';
-  //   const expectedContent = 'This is some test content.';
+    const sourceFilePath = '$staticPath/test_data/source.txt';
+    const destinationFilePath = '$staticPath/test_data/encrypted.txt';
+    const expectedContent = 'This is some test content.';
+    final key =
+        CryptoUtil.base642bin("/IEuAJ+fC8z6D9xlHOMf2qEbOkrBFjbtKDIZKMoNu3U=");
 
-  //   File(sourceFilePath).writeAsStringSync(expectedContent);
+    File(sourceFilePath).writeAsStringSync(expectedContent);
 
-  //   // Encrypt the file
-  //   final encryptionResult = await CryptoUtil.encryptFile(
-  //     sourceFilePath,
-  //     destinationFilePath,
-  //   );
+    // Encrypt the file
+    final encryptionResult = await CryptoUtil.encryptFile(
+      sourceFilePath,
+      destinationFilePath,
+      key: key,
+    );
 
-  //   // Verify encryption
-  //   final encryptedData = await File(destinationFilePath).readAsBytes();
-  //   expect(encryptedData,
-  //       isNot(expectedContent.codeUnits)); // Encrypted content differs
+    // Verify encryption
+    expect(encryptionResult.header, isNotNull);
 
-  //   // Decrypt the file to confirm
-  //   await CryptoUtil.decryptFile(
-  //     destinationFilePath,
-  //     '$staticPath/test_data/decrypted.txt',
-  //     encryptionResult.header!,
-  //     encryptionResult.key!,
-  //   );
+    final encryptedData = await File(destinationFilePath).readAsBytes();
+    expect(encryptedData,
+        isNot(expectedContent.codeUnits)); // Encrypted content differs
 
-  //   final decryptedContent =
-  //       await File('$staticPath/test_data/decrypted.txt').readAsString();
-  //   expect(decryptedContent, equals(expectedContent));
-  // });
+    // Decrypt the file to confirm
+    await CryptoUtil.decryptFile(
+      destinationFilePath,
+      '$staticPath/test_data/decrypted.txt',
+      encryptionResult.header!,
+      key,
+    );
 
-  // TBD: encryptFile, decryptFile,
+    final decryptedContent =
+        await File('$staticPath/test_data/decrypted.txt').readAsString();
+    expect(decryptedContent, equals(expectedContent));
+  });
 }

@@ -45,7 +45,7 @@ class _MyHomePageState extends State<MyHomePage> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: <Widget>[
             Text(
-              "Working? ${CryptoUtil.decryptionChunkSize == 4194321}",
+              "The Example App",
               style: Theme.of(context).textTheme.displayMedium,
             ),
           ],

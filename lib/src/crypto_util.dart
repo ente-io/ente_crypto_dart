@@ -9,7 +9,6 @@ import 'package:ente_crypto_dart/src/models/derived_key_result.dart';
 import 'package:ente_crypto_dart/src/models/device_info.dart';
 import 'package:ente_crypto_dart/src/models/encryption_result.dart';
 import 'package:logging/logging.dart';
-import 'package:rxdart/rxdart.dart';
 import 'package:sodium/sodium_sumo.dart';
 import 'package:sodium_libs/sodium_libs.dart';
 
@@ -23,9 +22,6 @@ const String loginSubKeyContext = "loginctx";
 late SodiumSumo sodium;
 
 class CryptoUtil {
-  static final int decryptionChunkSize =
-      encryptionChunkSize + sodium.crypto.secretStream.aBytes;
-
   static Future<void> init() async {
     try {
       sodium = await SodiumPlatform.instance.loadSodiumSumo();
@@ -352,43 +348,44 @@ class CryptoUtil {
     logger.info("Encrypting file of size $sourceFileLength");
 
     final inputFile = sourceFile.openSync(mode: io.FileMode.read);
-    final key = SecureKey.fromList(
-        sodium, skey ?? sodium.crypto.secretStream.keygen().extractBytes());
-
-    final controller = StreamController<Uint8List>();
-    final encryptedData = sodium.crypto.secretStream.push(
-      key: key,
-      messageStream: controller.stream,
+    final key = skey ?? sodium.crypto.secretStream.keygen().extractBytes();
+    final initPushResult = sodium.crypto.secretStream.createPush(
+      SecureKey.fromList(sodium, key),
     );
+    StreamController<Uint8List> controller = StreamController();
+    final res = initPushResult.bind(controller.stream);
+    var bytesRead = 0;
 
-    StreamController<Uint8List> consumer = StreamController();
-    final Stream<List<int>> source = sourceFile
-        .openRead()
-        .expand((bytes) => bytes)
-        .bufferCount(encryptionChunkSize);
-    await source
-        .map<Uint8List>((chunk) {
-          return Uint8List.fromList(chunk);
-        })
-        .transform(sodium.crypto.secretStream.createPush(key))
-        .pipe(consumer);
-
-    final destinationFileSink = destinationFile.openWrite();
-    await consumer.stream.forEach((chunk) {
-      destinationFileSink.add(chunk);
-    });
-    await destinationFileSink.close();
-    await consumer.close();
+    var stop = false;
+    while (!stop) {
+      var chunkSize = encryptionChunkSize;
+      if (bytesRead + chunkSize >= sourceFileLength) {
+        chunkSize = sourceFileLength - bytesRead;
+        stop = true;
+      }
+      final buffer = await inputFile.read(chunkSize);
+      bytesRead += chunkSize;
+      controller.add(buffer);
+    }
+    controller.close();
+    final result = (await res.toList());
+    Uint8List header = Uint8List(0);
+    for (final data in result.asMap().entries) {
+      if (data.key == 0) {
+        header = data.value;
+        continue;
+      } else if (data.key == result.length - 1) {
+        break;
+      }
+      await destinationFile.writeAsBytes(data.value, mode: io.FileMode.append);
+    }
     await inputFile.close();
 
     logger.info(
       "Encryption time: ${DateTime.now().millisecondsSinceEpoch - encryptionStartTime}",
     );
 
-    return EncryptionResult(
-      key: key.extractBytes(),
-      header: await encryptedData.first,
-    );
+    return EncryptionResult(key: key, header: header);
   }
 
   static Future<void> chachaDecryptFile(
@@ -403,28 +400,35 @@ class CryptoUtil {
     final destinationFile = io.File(destinationFilePath);
     final sourceFileLength = await sourceFile.length();
     logger.info("Decrypting file of size $sourceFileLength");
+    final int decryptionChunkSize =
+        encryptionChunkSize + sodium.crypto.secretStream.aBytes;
 
     final inputFile = sourceFile.openSync(mode: io.FileMode.read);
+    StreamController<Uint8List> controller = StreamController();
 
-    final consumer = StreamController<List<int>>();
+    final s = sodium.crypto.secretStream
+        .createPull(SecureKey.fromList(sodium, key), requireFinalized: false);
+    final res = s.bind(controller.stream);
 
-    final Stream<List<int>> source = sourceFile
-        .openRead()
-        .expand((bytes) => bytes)
-        .bufferCount(100 + sodium.crypto.secretStream.aBytes);
-    await source
-        .map<Uint8List>((chunk) => Uint8List.fromList(chunk))
-        .transform(sodium.crypto.secretStream
-            .createPull(SecureKey.fromList(sodium, key)))
-        .cast<List<int>>()
-        .pipe(consumer);
+    controller.add(header);
 
-    final destinationFileSink = destinationFile.openWrite();
-    await consumer.stream.forEach((chunk) {
-      destinationFileSink.add(chunk);
-    });
-    await destinationFileSink.close();
-    await consumer.close();
+    var bytesRead = 0;
+    var stop = false;
+    while (!stop) {
+      var chunkSize = decryptionChunkSize;
+      if (bytesRead + chunkSize >= sourceFileLength) {
+        chunkSize = sourceFileLength - bytesRead;
+        stop = true;
+      }
+      final buffer = await inputFile.read(chunkSize);
+      bytesRead += chunkSize;
+      controller.add(buffer);
+    }
+    controller.close();
+    final result = (await res.toList());
+    for (final data in result) {
+      await destinationFile.writeAsBytes(data, mode: io.FileMode.append);
+    }
     inputFile.closeSync();
 
     logger.info(

@@ -13,7 +13,6 @@ dependencies:
   flutter:
     sdk: flutter
   logging: ^1.2.0
-  rxdart: ^0.27.7
   sodium: ^2.3.0
   sodium_libs: ^2.2.0+5
 

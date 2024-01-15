@@ -183,7 +183,7 @@ packages:
     source: hosted
     version: "2.1.1"
   logging:
-    dependency: "direct main"
+    dependency: transitive
     description:
       name: logging
       sha256: "623a88c9594aa774443aa3eb2d41807a48486b5613e67599fb4c41c0ad47c340"
@@ -246,14 +246,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "4.2.4"
-  rxdart:
-    dependency: transitive
-    description:
-      name: rxdart
-      sha256: "0c7c0cedd93788d996e33041ffecda924cc54389199cde4e6a34b440f50044cb"
-      url: "https://pub.dev"
-    source: hosted
-    version: "0.27.7"
   sky_engine:
     dependency: transitive
     description: flutter
@@ -268,7 +260,7 @@ packages:
     source: hosted
     version: "2.3.0"
   sodium_libs:
-    dependency: "direct main"
+    dependency: transitive
     description:
       name: sodium_libs
       sha256: "8b1fb9254499aadd2d83824b055f9abaf052307bbc8629e494895ac02d6b867f"
