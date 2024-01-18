@@ -38,8 +38,15 @@ class CryptoUtil {
     return base64.decode(b64);
   }
 
-  static String bin2base64(Uint8List bin) {
-    return base64.encode(bin);
+  static String bin2base64(
+    Uint8List bin, {
+    bool urlSafe = false,
+  }) {
+    if (urlSafe) {
+      return base64UrlEncode(bin);
+    } else {
+      return base64.encode(bin);
+    }
   }
 
   static String bin2hex(Uint8List bin) {
