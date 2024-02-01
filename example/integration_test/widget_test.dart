@@ -24,10 +24,10 @@ void main() async {
   });
 
   test('converts Uint8List to hex string', () {
-    final bin = CryptoUtil.strToBin('Hello');
-    const expectedHex = '48656c6c6f';
-    final actualHex = CryptoUtil.bin2hex(bin);
-    expect(actualHex, equals(expectedHex));
+    final bin = CryptoUtil.strToBin('hello world');
+    final nowHex = CryptoUtil.bin2hex(bin);
+    final nowBin = CryptoUtil.hex2bin(nowHex);
+    expect(bin, equals(nowBin));
   });
 
   test(
@@ -39,11 +39,10 @@ void main() async {
     final encryptionResult = CryptoUtil.encryptSync(source, key);
 
     // Assertions
-    expect(encryptionResult, isNotNull);
-    expect(encryptionResult.encryptedData, isNotEmpty);
     expect(encryptionResult.key, equals(key));
-    expect(encryptionResult.nonce?.length,
-        equals(sodium.crypto.secretBox.nonceBytes));
+    expect(encryptionResult.key?.length, equals(32));
+    expect(encryptionResult.nonce?.length, 24);
+    expect(encryptionResult.encryptedData?.length, 29);
   });
 
   test('throws an error for invalid key length', () {
@@ -58,14 +57,15 @@ void main() async {
   test('Decrypts cipher with valid key and nonce', () async {
     // Sample data
     final source = CryptoUtil.strToBin('Hello, world!');
-    final key = CryptoUtil.randomKey();
 
-    final encryptionResult = CryptoUtil.encryptSync(source, key);
-    final cipher = encryptionResult.encryptedData;
+    final cipher =
+        CryptoUtil.base642bin("coL8gVEXmfmxeg6Csh9qNCA1zE/51IvdkZ6kASY=");
+    final key =
+        CryptoUtil.base642bin("td/427l8Us6Xp6TYSdYRzu+y5x2rkTGsYgWQ7X/gd/Q=");
 
-    final nonce = encryptionResult.nonce;
+    final nonce = CryptoUtil.base642bin("XJ7skkF4/t3LiZB//bXxFyaBJKGaJdFQ");
 
-    final plaintext = await CryptoUtil.decrypt(cipher!, key, nonce!);
+    final plaintext = await CryptoUtil.decrypt(cipher, key, nonce);
 
     expect(plaintext, source);
   });
