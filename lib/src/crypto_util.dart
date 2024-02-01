@@ -54,11 +54,16 @@ class CryptoUtil {
   }
 
   static Uint8List hex2bin(String hex) {
-    return Uint8List.fromList(
-      hex.split('').map((e) {
-        return int.parse(e, radix: 16);
-      }).toList(),
-    );
+    // Convert pairs of hex characters to code units
+    final codeUnits = hex
+        .replaceAllMapped(RegExp(r".{2}"), (match) => "${match.group(0)},")
+        .split(",")
+        .where((e) => e.isNotEmpty)
+        .map((hexPair) => int.parse(hexPair, radix: 16))
+        .toList();
+
+    // Convert the code units to a string
+    return Uint8List.fromList(codeUnits);
   }
 
   static EncryptionResult encryptSync(Uint8List source, Uint8List key) {
