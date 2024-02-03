@@ -26,9 +26,11 @@ final utf8Str = CryptoUtil.strToBin("Hello");
 Use the Following command for running them from the example directory of this project.
 
 ### Setup Files
-Download and place [this file](https://github.com/ente-io/ente_crypto_dart/assets/41370460/a5012a0e-00ef-4c08-a001-c1102ea842d9) in example/test_data folder
+Download and place [this file](https://github.com/ente-io/ente_crypto_dart/assets/41370460/a5012a0e-00ef-4c08-a001-c1102ea842d9) in example/test_data folder with file name `png-5mb-1.png`
 
-OR run the following commands from terminal
+**OR**
+
+Run the following commands from terminal
 ```bash
 cd example/test_data
 curl -O https://freetestdata.com/wp-content/uploads/2021/09/png-5mb-1.png
