@@ -15,12 +15,19 @@ dependencies:
     path: ../
   integration_test:
     sdk: flutter
+  flutter_sodium:
+  computer:
+  logging:
+  device_info_plus:
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
 
   flutter_lints: ^2.0.0
+
+dependency_overrides:
+  ffi: ^2.1.0
 
 flutter:
   uses-material-design: true

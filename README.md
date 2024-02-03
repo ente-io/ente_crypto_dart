@@ -20,13 +20,25 @@ initCryptoUtil();
 import 'package:ente_crypto_dart/ente_crypto_dart.dart';
 
 final utf8Str = CryptoUtil.strToBin("Hello");
-final decryptionChunk = CryptoUtil.decryptionChunkSize;
 ```
 
 ## Integration tests
 Use the Following command for running them from the example directory of this project.
+
+### Setup Files
+Download and place [this file](https://github.com/ente-io/ente_crypto_dart/assets/41370460/a5012a0e-00ef-4c08-a001-c1102ea842d9) in example/test_data folder
+
+OR run the following commands from terminal
 ```bash
-flutter test integration_test --dart-define=PWD=$(PWD) 
+cd example/test_data
+curl -O https://freetestdata.com/wp-content/uploads/2021/09/png-5mb-1.png
+cd ../..
+```
+
+### Running Tests
+```bash
+cd example
+flutter test integration_test --dart-define=PWD=$(PWD)
 ```
 
 ## Additional information
