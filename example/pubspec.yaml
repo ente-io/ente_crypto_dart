@@ -16,6 +16,9 @@ dependencies:
   integration_test:
     sdk: flutter
   flutter_sodium:
+    git:
+      url: https://github.com/ente-io/flutter_sodium
+      ref: dart
   computer:
   logging:
   device_info_plus:

@@ -133,10 +133,11 @@ packages:
   flutter_sodium:
     dependency: "direct main"
     description:
-      name: flutter_sodium
-      sha256: "0e8c475088f8c9a60fda0ef19ee42cdcb574f8549c8ea809f736ef60e8ad51a6"
-      url: "https://pub.dev"
-    source: hosted
+      path: "."
+      ref: dart
+      resolved-ref: c7c428062892ad88c2ede482ffa152bc6cc61827
+      url: "https://github.com/ente-io/flutter_sodium"
+    source: git
     version: "0.2.0"
   flutter_test:
     dependency: "direct dev"
