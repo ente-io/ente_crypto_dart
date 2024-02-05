@@ -13,28 +13,55 @@ void main() async {
   Computer.shared().turnOn(workersCount: 4, verbose: kDebugMode);
   await fs.CryptoUtil.init();
 
-  test('decodes base64 string to Uint8List', () {
+  test('Decode base64 string to Uint8List', () {
     const b64 = 'aGVsbG8gd29ybGQ=';
     final expectedBin = CryptoUtil.strToBin('hello world');
     final actualBin = CryptoUtil.base642bin(b64);
     expect(actualBin, equals(expectedBin));
   });
 
-  test('encodes Uint8List to base64 string', () {
+  test('Compare base642bin across sodium_libs and flutter_sodium', () {
+    const b64 = 'aGVsbG8gd29ybGQ=';
+    final bin = CryptoUtil.base642bin(b64);
+    final expectedBin = fs.CryptoUtil.base642bin(b64);
+    expect(bin, equals(expectedBin));
+  });
+  test('Encode Uint8List to base64 string', () {
     final bin = CryptoUtil.strToBin('hello world');
     const expectedB64 = 'aGVsbG8gd29ybGQ=';
     final actualB64 = CryptoUtil.bin2base64(bin);
     expect(actualB64, equals(expectedB64));
   });
 
-  test('converts Uint8List to hex string', () {
+  test('Compare bin2base64 across sodium_libs and flutter_sodium', () {
+    final bin = CryptoUtil.base642bin('aGVsbG8gd29ybGQ=');
+    final b64 = CryptoUtil.bin2base64(bin);
+    final expectedB64 = fs.CryptoUtil.bin2base64(bin);
+    expect(b64, equals(expectedB64));
+  });
+
+  test('Convert Uint8List to hex string', () {
     final bin = CryptoUtil.strToBin('hello world');
     final nowHex = CryptoUtil.bin2hex(bin);
     final nowBin = CryptoUtil.hex2bin(nowHex);
     expect(bin, equals(nowBin));
   });
 
-  test('Encrypt sodium_libs, Decrypt flutter_sodium', () async {
+  test('Compare bin2hex across sodium_libs and flutter_sodium', () {
+    final bin = CryptoUtil.strToBin('hello world');
+    final hex = CryptoUtil.bin2hex(bin);
+    final expectedHex = fs.CryptoUtil.bin2hex(bin);
+    expect(hex, equals(expectedHex));
+  });
+
+  test('Compare hex2bin across sodium_libs and flutter_sodium', () {
+    final bin = CryptoUtil.bin2hex(CryptoUtil.strToBin('hello world'));
+    final hex = CryptoUtil.hex2bin(bin);
+    final expectedHex = fs.CryptoUtil.hex2bin(bin);
+    expect(hex, equals(expectedHex));
+  });
+
+  test('Encrypt sodium_libs, decrypt flutter_sodium', () async {
     final source = CryptoUtil.strToBin('Hello, world!');
     final key = CryptoUtil.generateKey();
 
@@ -48,7 +75,7 @@ void main() async {
     expect(source, equals(out));
   });
 
-  test('throws an error for invalid key length', () {
+  test('Throw an error for invalid key length', () {
     // Invalid key length
     final invalidKey = Uint8List(10); // Assuming keyBytes is not 10
     final source = CryptoUtil.strToBin('data');
@@ -57,7 +84,7 @@ void main() async {
         throwsA(isA<Error>()));
   });
 
-  test('Encrypt flutter_sodium, Decrypt sodium_libs', () async {
+  test('Encrypt flutter_sodium, decrypt sodium_libs', () async {
     final source = CryptoUtil.strToBin('Hello, world!');
     final key = fs.CryptoUtil.generateKey();
 
@@ -71,43 +98,56 @@ void main() async {
     expect(source, equals(out));
   });
 
-  test('Encrypt Data', () async {
+  test('Encrypt data sodium_libs, decrypt on flutter_sodium', () async {
     final source = CryptoUtil.strToBin('hello world');
-    final key = CryptoUtil.strToBin('thisisof32lengthandmustbesecret1');
+    final key = fs.CryptoUtil.generateKey();
 
     final encrypted = await CryptoUtil.encryptData(source, key);
-    expect(encrypted.encryptedData, isNotNull);
-    expect(encrypted.header, isNotNull);
+
+    final decrypted = await fs.CryptoUtil.decryptChaCha(
+        encrypted.encryptedData!, key, encrypted.header!);
+    expect(decrypted, equals(source));
   });
 
-  test('Decrypt Data', () async {
+  test('Encrypt data on flutter_sodium and decrypt on sodium_libs', () async {
     final source = CryptoUtil.strToBin('hello world');
-    final encryptedData =
-        CryptoUtil.base642bin("cmZftCy/74d/J1O2J0Sl9hFUuewRzGQD6R/6vQ==");
-    final header = CryptoUtil.base642bin("qgBcUcziMyq15n/YjxIDN1CloyIGH8WT");
-    final key = CryptoUtil.strToBin('thisisof32lengthandmustbesecret1');
+    final key = fs.CryptoUtil.generateKey();
+
+    final encrypted = await fs.CryptoUtil.encryptChaCha(source, key);
 
     final decrypted = await CryptoUtil.decryptData(
-      encryptedData,
-      key,
-      header,
-    );
-
-    expect(decrypted, source);
+        encrypted.encryptedData!, key, encrypted.header!);
+    expect(decrypted, equals(source));
   });
 
-  test('check generated keypair', () async {
+  test('Decrypt data', () async {
+    final source = CryptoUtil.strToBin('hello world');
+    final key = fs.CryptoUtil.generateKey();
+
+    final encrypted = await CryptoUtil.encryptData(source, key);
+
+    final decrypted = await CryptoUtil.decryptData(
+        encrypted.encryptedData!, key, encrypted.header!);
+    expect(decrypted, equals(source));
+  });
+
+  test('Check generated keypair', () async {
     final keyPair = CryptoUtil.generateKeyPair();
     expect(keyPair.publicKey, isNotNull);
     expect(keyPair.secretKey, isNotNull);
+    final keyPair2 = await fs.CryptoUtil.generateKeyPair();
+    expect(keyPair.publicKey.length, keyPair2.pk.length);
+    expect(keyPair.secretKey.length, keyPair2.sk.length);
   });
 
-  test('test salt to derive key', () {
+  test('Test salt to derive key', () {
     final result = CryptoUtil.getSaltToDeriveKey();
     expect(result, isNotNull);
+    final result2 = fs.CryptoUtil.getSaltToDeriveKey();
+    expect(result.length, equals(result2.length));
   });
 
-  test('openSealSync decrypts ciphertextfrom sodium_libs correctly', () async {
+  test('openSealSync decrypts ciphertext from sodium_libs correctly', () async {
     final keyPair = CryptoUtil.generateKeyPair();
     final publicKey = keyPair.publicKey;
     final secretKey = keyPair.secretKey.extractBytes();
@@ -147,7 +187,7 @@ void main() async {
         throwsA(isA<SodiumException>()));
   });
 
-  test('succeeds with default memLimit and opsLimit on high-spec device',
+  test('Succeeds with default memLimit and opsLimit on high-spec device',
       () async {
     final password = CryptoUtil.strToBin('password');
     final salt = CryptoUtil.strToBin('thisisof16length');
@@ -156,9 +196,15 @@ void main() async {
     expect(result.key, isNotNull);
     expect(result.memLimit, sodium.crypto.pwhash.memLimitSensitive);
     expect(result.opsLimit, sodium.crypto.pwhash.opsLimitSensitive);
+
+    final expectedResult =
+        await fs.CryptoUtil.deriveSensitiveKey(password, salt);
+    expect(result.key, equals(expectedResult.key));
+    expect(result.memLimit, equals(expectedResult.memLimit));
+    expect(result.opsLimit, equals(expectedResult.opsLimit));
   });
 
-  test('succeeds with adjusted limits on low-spec device', () async {
+  test('Succeeds with adjusted limits on low-spec device', () async {
     if (await isLowSpecDevice()) {
       final password = CryptoUtil.strToBin('password');
       final salt = CryptoUtil.strToBin('thisisof16length');
@@ -167,15 +213,21 @@ void main() async {
       expect(result.key, isNotNull);
       expect(result.memLimit, sodium.crypto.pwhash.memLimitModerate);
       expect(result.opsLimit, 16);
+
+      final expectedResult =
+          await fs.CryptoUtil.deriveSensitiveKey(password, salt);
+      expect(result.key, equals(expectedResult.key));
+      expect(result.memLimit, equals(expectedResult.memLimit));
+      expect(result.opsLimit, equals(expectedResult.opsLimit));
     }
   });
 
-  test('throws UnsupportedError if all attempts fail', () async {
+  test('Throws UnsupportedError if all attempts fail', () async {
     expect(CryptoUtil.deriveSensitiveKey(Uint8List(0), Uint8List(0)),
         throwsUnsupportedError);
   });
 
-  test('derives a key with the correct parameters', () async {
+  test('Derives a key with the correct parameters', () async {
     final password = CryptoUtil.strToBin('password');
     final salt = CryptoUtil.strToBin('thisisof16length');
 
@@ -185,9 +237,15 @@ void main() async {
     expect(result.key.length, greaterThan(0));
     expect(result.memLimit, equals(sodium.crypto.pwhash.memLimitInteractive));
     expect(result.opsLimit, equals(sodium.crypto.pwhash.opsLimitInteractive));
+
+    final expectedResult =
+        await fs.CryptoUtil.deriveInteractiveKey(password, salt);
+    expect(result.key, equals(expectedResult.key));
+    expect(result.memLimit, equals(expectedResult.memLimit));
+    expect(result.opsLimit, equals(expectedResult.opsLimit));
   });
 
-  test('throws an KeyDerivationError if password is null', () async {
+  test('Throws a KeyDerivationError if password is null', () async {
     final salt = CryptoUtil.strToBin('salt456');
 
     expect(
@@ -195,7 +253,7 @@ void main() async {
         throwsA(isA<KeyDerivationError>()));
   });
 
-  test('throws an ArgumentError if salt is null', () async {
+  test('Throws an ArgumentError if salt is null', () async {
     final password = CryptoUtil.strToBin('password123');
 
     expect(
@@ -204,21 +262,24 @@ void main() async {
         throwsA(isA<KeyDerivationError>()));
   });
 
-  test('derives a login key with the correct parameters', () async {
+  test('Derives a login key with the correct parameters', () async {
     final key = CryptoUtil.generateKey();
 
     final derivedKey = await CryptoUtil.deriveLoginKey(key);
 
     expect(derivedKey, isNotNull);
     expect(derivedKey.length, equals(16)); // Ensures expected length
+
+    final expectedKey = await fs.CryptoUtil.deriveLoginKey(key);
+    expect(derivedKey, equals(expectedKey));
   });
 
-  test('throws a LoginKeyDerivationError if key derivation fails', () async {
+  test('Throws a LoginKeyDerivationError if key derivation fails', () async {
     expect(() async => await CryptoUtil.deriveLoginKey(Uint8List(0)),
         throwsA(isA<LoginKeyDerivationError>()));
   });
 
-  test('calculates the hash of a file correctly', () async {
+  test('Calculates the hash of a file correctly', () async {
     final testFile =
         File('test_file.txt'); // Create a test file with known content
     await testFile.writeAsString('test content');
@@ -230,9 +291,12 @@ void main() async {
         equals(sodium.crypto.genericHash.bytesMax)); // Verify hash length
     // Compare the hash with the expected value for the test content
     expect(hash.length, equals(64));
+
+    final expectedHash = await fs.CryptoUtil.getHash(testFile);
+    expect(hash, equals(expectedHash));
   });
 
-  test('throws an error if the file does not exist', () async {
+  test('Throws an error if the file does not exist', () async {
     final nonExistentFile = File('non_existent_file.txt');
 
     expect(() async => await getHash(nonExistentFile),
@@ -246,8 +310,6 @@ void main() async {
     const sourceFilePath = '$staticPath/test_data/png-5mb-1.png';
     const encryptPath = '$staticPath/test_data/encrypted.txt';
     const decryptPath = '$staticPath/test_data/decrypted.png';
-    final key = fs.CryptoUtil.base642bin(
-        "/IEuAJ+fC8z6D9xlHOMf2qEbOkrBFjbtKDIZKMoNu3U=");
 
     if (File(encryptPath).existsSync()) {
       File(encryptPath).deleteSync();
@@ -260,11 +322,7 @@ void main() async {
     final encryptionResult = await fs.CryptoUtil.encryptFile(
       sourceFilePath,
       encryptPath,
-      key: key,
     );
-
-    // Verify encryption
-    expect(encryptionResult.header, isNotNull);
 
     final expectedContent = await File(sourceFilePath).readAsBytes();
 
@@ -273,7 +331,7 @@ void main() async {
       encryptPath,
       decryptPath,
       encryptionResult.header!,
-      key,
+      encryptionResult.key!,
     );
 
     final decryptedContent = await File(decryptPath).readAsBytes();
@@ -288,9 +346,6 @@ void main() async {
     const encryptPath = '$staticPath/test_data/encrypted_sd.txt';
     const decryptPath = '$staticPath/test_data/decrypted_sd.png';
 
-    final key =
-        CryptoUtil.base642bin("/IEuAJ+fC8z6D9xlHOMf2qEbOkrBFjbtKDIZKMoNu3U=");
-
     if (File(encryptPath).existsSync()) {
       File(encryptPath).deleteSync();
     }
@@ -302,22 +357,16 @@ void main() async {
     final encryptionResult = await CryptoUtil.encryptFile(
       sourceFilePath,
       encryptPath,
-      key: key,
     );
 
-    // Verify encryption
-    expect(encryptionResult.header, isNotNull);
-
     final expectedContent = await File(sourceFilePath).readAsBytes();
-    final encryptedData = await File(encryptPath).readAsBytes();
-    expect(encryptedData, isNot(expectedContent)); // Encrypted content differs
 
     // Decrypt the file to confirm
     await fs.CryptoUtil.decryptFile(
       encryptPath,
       decryptPath,
       encryptionResult.header!,
-      key,
+      encryptionResult.key!,
     );
     final decryptedContent = await File(decryptPath).readAsBytes();
     expect(decryptedContent, equals(expectedContent));
