@@ -25,14 +25,6 @@ final utf8Str = CryptoUtil.strToBin("Hello");
 ## Integration tests
 Use the Following command for running them from the example directory of this project.
 
-### Setup Example
-
-```
-cd example
-flutter create .
-cd ..
-```
-
 ### Setup Files
 Download and place [this file](https://github.com/ente-io/ente_crypto_dart/assets/41370460/a5012a0e-00ef-4c08-a001-c1102ea842d9) in example/test_data folder with file name `png-5mb-1.png`
 
