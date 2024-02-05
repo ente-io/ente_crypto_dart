@@ -32,7 +32,10 @@ Download and place [this file](https://github.com/ente-io/ente_crypto_dart/asset
 
 Run the following commands from terminal
 ```bash
-cd example/test_data
+cd example
+flutter create .
+mkdir test_data
+cd test_data
 curl -O https://freetestdata.com/wp-content/uploads/2021/09/png-5mb-1.png
 cd ../..
 ```
