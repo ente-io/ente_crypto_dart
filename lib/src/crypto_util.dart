@@ -433,24 +433,27 @@ class CryptoUtil {
     Uint8List salt,
   ) async {
     final logger = Logger("pwhash");
-    int memLimit = sodium.crypto.pwhash.memLimitSensitive;
-    int opsLimit = sodium.crypto.pwhash.opsLimitSensitive;
-    if (await isLowSpecDevice()) {
-      logger.info("low spec device detected");
+    final int desiredStrength = sodium.crypto.pwhash.memLimitSensitive *
+        sodium.crypto.pwhash.opsLimitSensitive;
 
-      // When sensitive memLimit (1 GB) is used, on low spec device the OS might
-      // kill the app with OOM. To avoid that, start with 256 MB and
-      // corresponding ops limit (16).
-      // This ensures that the product of these two variables
-      // (the area under the graph that determines the amount of work required)
-      // stays the same
-      // SODIUM_CRYPTO_PWHASH_MEMLIMIT_SENSITIVE: 1073741824
-      // SODIUM_CRYPTO_PWHASH_MEMLIMIT_MODERATE: 268435456
-      // SODIUM_CRYPTO_PWHASH_OPSLIMIT_SENSITIVE: 4
-      memLimit = sodium.crypto.pwhash.memLimitModerate;
-      final factor = sodium.crypto.pwhash.memLimitSensitive ~/
-          sodium.crypto.pwhash.memLimitModerate; // = 4
-      opsLimit = opsLimit * factor; // = 16
+    // When sensitive memLimit (1 GB) is used, on low spec device the OS might
+    // kill the app with OOM. To avoid that, start with 256 MB and
+    // corresponding ops limit (16).
+    // This ensures that the product of these two variables
+    // (the area under the graph that determines the amount of work required)
+    // stays the same
+    // SODIUM_CRYPTO_PWHASH_MEMLIMIT_SENSITIVE: 1073741824
+    // SODIUM_CRYPTO_PWHASH_MEMLIMIT_MODERATE: 268435456
+    // SODIUM_CRYPTO_PWHASH_OPSLIMIT_SENSITIVE: 4
+    int memLimit = sodium.crypto.pwhash.memLimitModerate;
+    final factor = sodium.crypto.pwhash.memLimitSensitive ~/
+        sodium.crypto.pwhash.memLimitModerate; // = 4
+    int opsLimit = sodium.crypto.pwhash.opsLimitSensitive * factor; // = 16
+
+    if (memLimit * opsLimit != desiredStrength) {
+      throw UnsupportedError(
+        "unexpcted values for memLimit $memLimit and opsLimit: $opsLimit",
+      );
     }
     Uint8List key;
     while (memLimit >= sodium.crypto.pwhash.memLimitMin &&
