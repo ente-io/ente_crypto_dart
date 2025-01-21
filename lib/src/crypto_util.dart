@@ -254,8 +254,9 @@ class CryptoUtil {
   static Future<void> init() async {
     try {
       sodium = await SodiumPlatform.instance.loadSodiumSumo();
-    } catch (e) {
-      log(e.toString());
+    } catch (e, s) {
+      Logger("CryptoUtil").severe("Failed to load sodium", e, s);
+      rethrow;
     }
   }
 
