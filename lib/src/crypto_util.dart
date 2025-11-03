@@ -4,6 +4,8 @@ import 'dart:io' as io;
 import 'dart:developer';
 import 'dart:typed_data';
 
+import 'package:convert/convert.dart';
+import 'package:crypto/crypto.dart';
 import 'package:ente_crypto_dart/src/core/errors.dart';
 import 'package:ente_crypto_dart/src/models/derived_key_result.dart';
 import 'package:ente_crypto_dart/src/models/device_info.dart';
@@ -250,6 +252,236 @@ Future<Uint8List> chachaDecryptData(
       ));
 }
 
+// Encrypts a file with MD5 calculation and real-time verification
+Future<FileEncryptResult> chachaEncryptFileWithVerification(
+  String sourceFilePath,
+  String destinationFilePath,
+  Uint8List? skey,
+  int? multiPartChunkSizeInBytes,
+  Sodium sodium,
+) async {
+  final encryptionStartTime = DateTime.now();
+  final logger = Logger('ChaChaEncryptWithMD5');
+  final sourceFile = io.File(sourceFilePath);
+  final destinationFile = io.File(destinationFilePath);
+  final sourceFileLength = await sourceFile.length();
+
+  logger.info('Encrypting file of size $sourceFileLength');
+  if (multiPartChunkSizeInBytes != null) {
+    logger.info('Using multipart chunk size: $multiPartChunkSizeInBytes bytes');
+  }
+
+  final inputFile = sourceFile.openSync(mode: io.FileMode.read);
+
+  final key = skey ?? sodium.crypto.secretStream.keygen().extractBytes();
+  final pushState = sodium.crypto.secretStream.createPushEx(
+    SecureKey.fromList(sodium, key),
+  );
+
+  // Create controllers for streaming encryption
+  StreamController<SecretStreamPlainMessage> pushController =
+      StreamController();
+  final encryptedStream = pushState.bind(pushController.stream);
+
+  // MD5 setup
+  AccumulatorSink<Digest>? fullAccumulator;
+  ChunkedConversionSink<List<int>>? fullMd5Sink;
+  AccumulatorSink<Digest>? partAccumulator;
+  ChunkedConversionSink<List<int>>? partMd5Sink;
+
+  final List<String> partMd5s = [];
+  final BytesBuilder partBuffer = BytesBuilder();
+
+  if (multiPartChunkSizeInBytes == null) {
+    fullAccumulator = AccumulatorSink<Digest>();
+    fullMd5Sink = md5.startChunkedConversion(fullAccumulator);
+  } else {
+    partAccumulator = AccumulatorSink<Digest>();
+    partMd5Sink = md5.startChunkedConversion(partAccumulator);
+  }
+
+  var bytesRead = 0;
+  var chunkIndex = 0;
+
+  try {
+    // Read and add all chunks to the controller
+    var stop = false;
+    while (!stop) {
+      var chunkSize = encryptionChunkSize;
+      if (bytesRead + chunkSize >= sourceFileLength) {
+        chunkSize = sourceFileLength - bytesRead;
+        stop = true;
+      }
+
+      final buffer = await inputFile.read(chunkSize);
+      if (buffer.length != chunkSize) {
+        throw Exception(
+          'Failed to read $chunkSize bytes, but got ${buffer.length} bytes',
+        );
+      }
+
+      bytesRead += chunkSize;
+      pushController.add(
+        SecretStreamPlainMessage(
+          buffer,
+          tag: stop
+              ? SecretStreamMessageTag.finalPush
+              : SecretStreamMessageTag.push,
+        ),
+      );
+    }
+    pushController.close();
+    await inputFile.close();
+
+    // Collect all encrypted outputs
+    final encryptedResults = await encryptedStream.toList();
+
+    // First output is the header
+    if (encryptedResults.isEmpty) {
+      throw Exception('No encrypted data produced');
+    }
+
+    final header = encryptedResults[0].message;
+    logger.info(
+        'Header extracted, ${encryptedResults.length - 1} encrypted chunks');
+
+    // Write encrypted chunks to file and calculate MD5
+    var totalEncryptedBytes = 0;
+    for (int i = 1; i < encryptedResults.length; i++) {
+      final encryptedChunk = encryptedResults[i].message;
+      totalEncryptedBytes += encryptedChunk.length;
+
+      if (multiPartChunkSizeInBytes == null) {
+        // Single-part: calculate full file MD5 and write directly
+        fullMd5Sink!.add(encryptedChunk);
+        await destinationFile.writeAsBytes(
+          encryptedChunk,
+          mode: io.FileMode.append,
+        );
+      } else {
+        // Multi-part: buffer data and flush at exact part boundaries
+        partBuffer.add(encryptedChunk);
+
+        // Flush complete parts from buffer
+        while (partBuffer.length >= multiPartChunkSizeInBytes) {
+          final partBytes =
+              partBuffer.toBytes().sublist(0, multiPartChunkSizeInBytes);
+
+          // Calculate MD5 for this part
+          partMd5Sink!.add(partBytes);
+          partMd5Sink.close();
+          final digest = partAccumulator!.events.single;
+          partMd5s.add(base64.encode(digest.bytes));
+
+          logger.info(
+            'Part ${partMd5s.length}: $multiPartChunkSizeInBytes bytes',
+          );
+
+          // Write to disk
+          await destinationFile.writeAsBytes(
+            partBytes,
+            mode: io.FileMode.append,
+          );
+
+          // Keep remaining bytes for next part
+          final remaining =
+              partBuffer.toBytes().sublist(multiPartChunkSizeInBytes);
+          partBuffer.clear();
+          partBuffer.add(remaining);
+
+          // Start new MD5 for next part
+          partAccumulator = AccumulatorSink<Digest>();
+          partMd5Sink = md5.startChunkedConversion(partAccumulator);
+        }
+
+        // Handle last chunk (remaining data < partSize)
+        if (i == encryptedResults.length - 1 && partBuffer.isNotEmpty) {
+          final lastPartBytes = partBuffer.toBytes();
+
+          // Calculate MD5 for last part
+          partMd5Sink!.add(lastPartBytes);
+          partMd5Sink.close();
+          final digest = partAccumulator!.events.single;
+          partMd5s.add(base64.encode(digest.bytes));
+
+          // Write to disk
+          await destinationFile.writeAsBytes(
+            lastPartBytes,
+            mode: io.FileMode.append,
+          );
+          partBuffer.clear();
+        }
+      }
+    }
+
+    // Finalize MD5
+    String? finalFileMd5;
+    if (multiPartChunkSizeInBytes == null && fullMd5Sink != null) {
+      fullMd5Sink.close();
+      final digest = fullAccumulator!.events.single;
+      finalFileMd5 = base64.encode(digest.bytes);
+      logger.info('File MD5: $finalFileMd5');
+    }
+
+    final encryptionTimeSeconds = (DateTime.now().millisecondsSinceEpoch -
+            encryptionStartTime.millisecondsSinceEpoch) /
+        1000;
+    final partsInfo =
+        multiPartChunkSizeInBytes != null ? ' Parts: ${partMd5s.length}' : '';
+    logger.info(
+      'FileEncryption: Time: ${encryptionTimeSeconds}s '
+      'Total encrypted: $totalEncryptedBytes bytes$partsInfo',
+    );
+
+    return FileEncryptResult(
+      key: key,
+      header: header,
+      fileMd5: finalFileMd5,
+      partMd5s: multiPartChunkSizeInBytes != null && partMd5s.isNotEmpty
+          ? partMd5s
+          : null,
+      partSize: multiPartChunkSizeInBytes,
+    );
+  } catch (e) {
+    try {
+      await inputFile.close();
+    } catch (_) {}
+    if (await destinationFile.exists()) {
+      try {
+        await destinationFile.delete();
+      } catch (_) {}
+    }
+    rethrow;
+  }
+}
+
+// Fast equality check for Uint8List
+bool _uint8listEquals(Uint8List a, Uint8List b) {
+  if (identical(a, b)) return true;
+  if (a.length != b.length) return false;
+
+  final len = a.length;
+  int i = 0;
+
+  // Compare 8 bytes at a time for speed
+  while (i + 7 < len) {
+    final va =
+        a.buffer.asByteData().getUint64(a.offsetInBytes + i, Endian.little);
+    final vb =
+        b.buffer.asByteData().getUint64(b.offsetInBytes + i, Endian.little);
+    if (va != vb) return false;
+    i += 8;
+  }
+
+  // Remaining bytes
+  while (i < len) {
+    if (a[i] != b[i]) return false;
+    i++;
+  }
+
+  return true;
+}
+
 class CryptoUtil {
   static Future<void> init() async {
     try {
@@ -371,6 +603,24 @@ class CryptoUtil {
   }) {
     return sodium.runIsolated((sodium, secureKeys, keyPairs) =>
         chachaEncryptFile(sourceFilePath, destinationFilePath, key, sodium));
+  }
+
+  // Encrypts the file with MD5 calculation and real-time verification
+  static Future<FileEncryptResult> encryptFileWithMD5(
+    String sourceFilePath,
+    String destinationFilePath, {
+    Uint8List? key,
+    int? multiPartChunkSizeInBytes,
+  }) {
+    return sodium.runIsolated(
+      (sodium, secureKeys, keyPairs) => chachaEncryptFileWithVerification(
+        sourceFilePath,
+        destinationFilePath,
+        key,
+        multiPartChunkSizeInBytes,
+        sodium,
+      ),
+    );
   }
 
   // Decrypts the file at sourceFilePath, with the given key and header using
