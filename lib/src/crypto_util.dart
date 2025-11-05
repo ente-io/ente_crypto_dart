@@ -126,11 +126,11 @@ Future<EncryptionResult> chachaEncryptData(
 
   final result = await res.toList();
 
-  // initPushResult.header contains the header
-  // result[0].message contains the encrypted data with TagFinal
+  // result[0].message contains the header
+  // result[1].message contains the encrypted data with TagFinal
   return EncryptionResult(
-    encryptedData: result[0].message,
-    header: initPushResult.header,
+    encryptedData: result[1].message,
+    header: result[0].message,
   );
 }
 
