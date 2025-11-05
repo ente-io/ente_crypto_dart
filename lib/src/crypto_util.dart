@@ -107,27 +107,27 @@ Future<Uint8List> cryptoGenericHash(
 
 Future<EncryptionResult> chachaEncryptData(
     Uint8List source, Uint8List key, Sodium sodium) async {
-  StreamController<Uint8List> controller = StreamController();
+  StreamController<SecretStreamPlainMessage> controller = StreamController();
 
   final s = sodium.crypto.secretStream.createPush(
     SecureKey.fromList(sodium, key),
   );
 
-  controller.add(source);
+  // Explicitly tag the data with finalPush to match the Mobile implementation
+  controller.add(
+    SecretStreamPlainMessage(
+      source,
+      tag: SecretStreamMessageTag.finalPush,
+    ),
+  );
   final res = s.bind(controller.stream);
   controller.close();
 
   List<Uint8List> encBytes = await res.toList();
   // encBytes[0] is the header
-  // encBytes[1] is the ciphertext chunk
-  // encBytes[2] is the final authentication tag (automatically appended when stream closes)
-  // The final tag must be concatenated to the ciphertext for proper verification
-  final ciphertext = Uint8List.fromList([
-    ...encBytes[1],
-    ...encBytes[2],
-  ]);
+  // encBytes[1] is the encrypted data with TagFinal (no empty final block needed)
   return EncryptionResult(
-    encryptedData: ciphertext,
+    encryptedData: encBytes[1],
     header: encBytes[0],
   );
 }
