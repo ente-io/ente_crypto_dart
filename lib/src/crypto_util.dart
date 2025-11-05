@@ -244,7 +244,12 @@ Future<void> chachaDecryptFile(
 }
 
 Future<Uint8List> chachaDecryptData(
-    Uint8List source, Uint8List key, Uint8List header, Sodium sodium) async {
+    Uint8List source,
+    Uint8List key,
+    Uint8List header,
+    Sodium sodium, {
+    Uint8List? nonce,
+  }) async {
   StreamController<Uint8List> controller = StreamController();
 
   final s = sodium.crypto.secretStream
@@ -252,7 +257,15 @@ Future<Uint8List> chachaDecryptData(
   final res = s.bind(controller.stream);
 
   controller.add(header);
-  controller.add(source);
+
+  // For backward compatibility: if nonce is provided, concatenate it to source.
+  // Old implementation incorrectly stored the final authentication block as "nonce".
+  if (nonce != null && nonce.isNotEmpty) {
+    final combined = Uint8List.fromList([...source, ...nonce]);
+    controller.add(combined);
+  } else {
+    controller.add(source);
+  }
 
   controller.close();
 
@@ -592,13 +605,16 @@ class CryptoUtil {
 
   // Decrypts the given source, with the given key and header using XChaCha20
   // (w Poly1305 MAC).
+  // For backward compatibility, accepts optional nonce parameter which was used
+  // in older implementation to store the final authentication block separately.
   static Future<Uint8List> decryptData(
     Uint8List source,
     Uint8List key,
-    Uint8List header,
-  ) async {
+    Uint8List header, {
+    Uint8List? nonce,
+  }) async {
     return await sodium.runIsolated((sodium, secureKeys, keyPairs) =>
-        chachaDecryptData(source, key, header, sodium));
+        chachaDecryptData(source, key, header, sodium, nonce: nonce));
   }
 
   // Encrypts the file at sourceFilePath, with the key (if provided) and a
