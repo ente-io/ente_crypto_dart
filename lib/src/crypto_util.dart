@@ -118,10 +118,17 @@ Future<EncryptionResult> chachaEncryptData(
   controller.close();
 
   List<Uint8List> encBytes = await res.toList();
+  // encBytes[0] is the header
+  // encBytes[1] is the ciphertext chunk
+  // encBytes[2] is the final authentication tag (automatically appended when stream closes)
+  // The final tag must be concatenated to the ciphertext for proper verification
+  final ciphertext = Uint8List.fromList([
+    ...encBytes[1],
+    ...encBytes[2],
+  ]);
   return EncryptionResult(
-    encryptedData: encBytes[1],
+    encryptedData: ciphertext,
     header: encBytes[0],
-    nonce: encBytes[2],
   );
 }
 
