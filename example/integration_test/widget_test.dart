@@ -371,4 +371,39 @@ void main() async {
     final decryptedContent = await File(decryptPath).readAsBytes();
     expect(decryptedContent, equals(expectedContent));
   });
+
+  test('Encrypts and decrypts file with same library (sodium_libs)', () async {
+    // This test ensures sodium_libs can decrypt its own encrypted files
+    const staticPath = String.fromEnvironment('PWD');
+
+    const sourceFilePath = '$staticPath/test_data/png-5mb-1.png';
+    const encryptPath = '$staticPath/test_data/encrypted_same_lib.txt';
+    const decryptPath = '$staticPath/test_data/decrypted_same_lib.png';
+
+    if (File(encryptPath).existsSync()) {
+      File(encryptPath).deleteSync();
+    }
+    if (File(decryptPath).existsSync()) {
+      File(decryptPath).deleteSync();
+    }
+
+    // Encrypt the file with sodium_libs
+    final encryptionResult = await CryptoUtil.encryptFile(
+      sourceFilePath,
+      encryptPath,
+    );
+
+    final expectedContent = await File(sourceFilePath).readAsBytes();
+
+    // Decrypt the file with the SAME library (sodium_libs)
+    await CryptoUtil.decryptFile(
+      encryptPath,
+      decryptPath,
+      encryptionResult.header!,
+      encryptionResult.key!,
+    );
+
+    final decryptedContent = await File(decryptPath).readAsBytes();
+    expect(decryptedContent, equals(expectedContent));
+  });
 }
