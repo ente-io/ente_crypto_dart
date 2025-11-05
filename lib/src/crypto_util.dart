@@ -178,6 +178,12 @@ Future<EncryptionResult> chachaEncryptFile(
   controller.close();
   final result = (await res.toList());
   Uint8List header = Uint8List(0);
+
+  // Delete the destination file if it exists to avoid appending to old data
+  if (await destinationFile.exists()) {
+    await destinationFile.delete();
+  }
+
   for (int i = 0; i < result.length; i++) {
     final data = result[i];
     if (i == 0) {
@@ -233,6 +239,12 @@ Future<void> chachaDecryptFile(
   }
   controller.close();
   final result = (await res.toList());
+
+  // Delete the destination file if it exists to avoid appending to old data
+  if (await destinationFile.exists()) {
+    await destinationFile.delete();
+  }
+
   for (final data in result) {
     await destinationFile.writeAsBytes(data, mode: io.FileMode.append);
   }
@@ -287,6 +299,11 @@ Future<FileEncryptResult> chachaEncryptFileWithVerification(
   final sourceFile = io.File(sourceFilePath);
   final destinationFile = io.File(destinationFilePath);
   final sourceFileLength = await sourceFile.length();
+
+  // Delete the destination file if it exists to avoid appending to old data
+  if (await destinationFile.exists()) {
+    await destinationFile.delete();
+  }
 
   logger.info('Encrypting file of size $sourceFileLength');
   if (multiPartChunkSizeInBytes != null) {
