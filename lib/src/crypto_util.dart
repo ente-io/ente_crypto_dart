@@ -384,6 +384,11 @@ Future<FileEncryptResult> chachaEncryptFileWithVerification(
     logger.info(
         'Header extracted, ${encryptedResults.length - 1} encrypted chunks');
 
+    // Ensure we never append on top of stale ciphertext from an earlier run.
+    if (await destinationFile.exists()) {
+      await destinationFile.delete();
+    }
+
     // Write encrypted chunks to file and calculate MD5
     var totalEncryptedBytes = 0;
     for (int i = 1; i < encryptedResults.length; i++) {
