@@ -239,7 +239,8 @@ Future<void> chachaDecryptFile(
   );
 }
 
-Future<Uint8List> chachaDecryptData(Uint8List source, Uint8List key, Uint8List header, Sodium sodium) async {
+Future<Uint8List> chachaDecryptData(
+    Uint8List source, Uint8List key, Uint8List header, Sodium sodium) async {
   StreamController<Uint8List> controller = StreamController();
 
   final s = sodium.crypto.secretStream
@@ -590,7 +591,7 @@ class CryptoUtil {
   static Future<Uint8List> decryptData(
     Uint8List source,
     Uint8List key,
-    Uint8List header
+    Uint8List header,
   ) async {
     return await sodium.runIsolated((sodium, secureKeys, keyPairs) =>
         chachaDecryptData(source, key, header, sodium));
