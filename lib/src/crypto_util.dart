@@ -125,9 +125,6 @@ Future<EncryptionResult> chachaEncryptData(
   controller.close();
 
   final result = await res.toList();
-
-  // result[0].message contains the header
-  // result[1].message contains the encrypted data with TagFinal
   return EncryptionResult(
     encryptedData: result[1].message,
     header: result[0].message,
