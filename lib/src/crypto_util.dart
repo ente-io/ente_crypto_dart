@@ -107,7 +107,6 @@ Future<Uint8List> cryptoGenericHash(
 
 Future<EncryptionResult> chachaEncryptData(
     Uint8List source, Uint8List key, Sodium sodium) async {
-  // Use createPushEx like chachaEncryptFile does for consistent behavior
   final initPushResult = sodium.crypto.secretStream.createPushEx(
     SecureKey.fromList(sodium, key),
   );
@@ -175,7 +174,6 @@ Future<EncryptionResult> chachaEncryptFile(
   controller.close();
   final result = (await res.toList());
   Uint8List header = Uint8List(0);
-
   for (int i = 0; i < result.length; i++) {
     final data = result[i];
     if (i == 0) {
@@ -231,7 +229,6 @@ Future<void> chachaDecryptFile(
   }
   controller.close();
   final result = (await res.toList());
-
   for (final data in result) {
     await destinationFile.writeAsBytes(data, mode: io.FileMode.append);
   }
