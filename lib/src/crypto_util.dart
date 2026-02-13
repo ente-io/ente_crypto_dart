@@ -486,6 +486,51 @@ bool _uint8listEquals(Uint8List a, Uint8List b) {
   return true;
 }
 
+String? _toB64(Uint8List? value) => value == null ? null : base64Encode(value);
+
+Uint8List? _fromB64(dynamic value) {
+  if (value == null) return null;
+  return base64Decode(value as String);
+}
+
+Map<String, String?> _encryptionResultToMap(EncryptionResult result) {
+  return {
+    'encryptedData': _toB64(result.encryptedData),
+    'key': _toB64(result.key),
+    'header': _toB64(result.header),
+    'nonce': _toB64(result.nonce),
+  };
+}
+
+EncryptionResult _encryptionResultFromMap(Map result) {
+  return EncryptionResult(
+    encryptedData: _fromB64(result['encryptedData']),
+    key: _fromB64(result['key']),
+    header: _fromB64(result['header']),
+    nonce: _fromB64(result['nonce']),
+  );
+}
+
+Map<String, dynamic> _fileEncryptResultToMap(FileEncryptResult result) {
+  return {
+    'key': _toB64(result.key),
+    'header': _toB64(result.header),
+    'fileMd5': result.fileMd5,
+    'partMd5s': result.partMd5s,
+    'partSize': result.partSize,
+  };
+}
+
+FileEncryptResult _fileEncryptResultFromMap(Map result) {
+  return FileEncryptResult(
+    key: _fromB64(result['key'])!,
+    header: _fromB64(result['header'])!,
+    fileMd5: result['fileMd5'] as String?,
+    partMd5s: (result['partMd5s'] as List?)?.cast<String>(),
+    partSize: result['partSize'] as int?,
+  );
+}
+
 class CryptoUtil {
   static Future<void> init() async {
     try {
@@ -580,7 +625,13 @@ class CryptoUtil {
     Uint8List source,
     Uint8List key,
   ) async {
-    return chachaEncryptData(source, key, sodium);
+    final result = await sodium.runIsolated(
+      (sodium, secureKeys, keyPairs) async {
+        final encryptedResult = await chachaEncryptData(source, key, sodium);
+        return _encryptionResultToMap(encryptedResult);
+      },
+    );
+    return _encryptionResultFromMap(result);
   }
 
   // Decrypts the given source, with the given key and header using XChaCha20
@@ -602,8 +653,19 @@ class CryptoUtil {
     String sourceFilePath,
     String destinationFilePath, {
     Uint8List? key,
-  }) {
-    return chachaEncryptFile(sourceFilePath, destinationFilePath, key, sodium);
+  }) async {
+    final result = await sodium.runIsolated(
+      (sodium, secureKeys, keyPairs) async {
+        final encryptedResult = await chachaEncryptFile(
+          sourceFilePath,
+          destinationFilePath,
+          key,
+          sodium,
+        );
+        return _encryptionResultToMap(encryptedResult);
+      },
+    );
+    return _encryptionResultFromMap(result);
   }
 
   // Encrypts the file with MD5 calculation and real-time verification
@@ -612,14 +674,20 @@ class CryptoUtil {
     String destinationFilePath, {
     Uint8List? key,
     int? multiPartChunkSizeInBytes,
-  }) {
-    return chachaEncryptFileWithVerification(
-      sourceFilePath,
-      destinationFilePath,
-      key,
-      multiPartChunkSizeInBytes,
-      sodium,
+  }) async {
+    final result = await sodium.runIsolated(
+      (sodium, secureKeys, keyPairs) async {
+        final encryptedResult = await chachaEncryptFileWithVerification(
+          sourceFilePath,
+          destinationFilePath,
+          key,
+          multiPartChunkSizeInBytes,
+          sodium,
+        );
+        return _fileEncryptResultToMap(encryptedResult);
+      },
     );
+    return _fileEncryptResultFromMap(result);
   }
 
   // Decrypts the file at sourceFilePath, with the given key and header using
@@ -630,12 +698,14 @@ class CryptoUtil {
     Uint8List header,
     Uint8List key,
   ) {
-    return chachaDecryptFile(
-      sourceFilePath,
-      destinationFilePath,
-      header,
-      key,
-      sodium,
+    return sodium.runIsolated(
+      (sodium, secureKeys, keyPairs) => chachaDecryptFile(
+        sourceFilePath,
+        destinationFilePath,
+        header,
+        key,
+        sodium,
+      ),
     );
   }
 
@@ -689,11 +759,18 @@ class CryptoUtil {
     final int desiredStrength = sodium.crypto.pwhash.memLimitSensitive *
         sodium.crypto.pwhash.opsLimitSensitive;
 
-    // Try the sensitive defaults first. If this fails (for example, on low-spec
-    // devices), progressively reduce memLimit and increase opsLimit while
-    // keeping the same overall strength.
     int memLimit = sodium.crypto.pwhash.memLimitSensitive;
     int opsLimit = sodium.crypto.pwhash.opsLimitSensitive;
+
+    // On low-spec devices, start from moderate memory and proportionally higher
+    // ops to preserve overall strength while lowering peak RAM pressure.
+    if (await isLowSpecDevice()) {
+      logger.info("low spec device detected");
+      memLimit = sodium.crypto.pwhash.memLimitModerate;
+      final factor = sodium.crypto.pwhash.memLimitSensitive ~/
+          sodium.crypto.pwhash.memLimitModerate;
+      opsLimit = sodium.crypto.pwhash.opsLimitSensitive * factor;
+    }
 
     if (memLimit * opsLimit != desiredStrength) {
       throw UnsupportedError(
