@@ -714,11 +714,17 @@ class CryptoUtil {
     final int desiredStrength = sodium.crypto.pwhash.memLimitSensitive *
         sodium.crypto.pwhash.opsLimitSensitive;
 
+    // Keep the effective Argon2 work factor constant initially and fallback to
+    // lower memory, higher ops for low-spec devices.
     int memLimit = sodium.crypto.pwhash.memLimitSensitive;
     int opsLimit = sodium.crypto.pwhash.opsLimitSensitive;
 
-    // On low-spec devices, start from moderate memory and proportionally higher
-    // ops to preserve overall strength while lowering peak RAM pressure.
+    // When sensitive memLimit (1 GB) is used, low spec devices can hit OOM.
+    // Start with 256 MB and a proportional ops limit (16) so the work product
+    // stays the same.
+    // SODIUM_CRYPTO_PWHASH_MEMLIMIT_SENSITIVE: 1073741824
+    // SODIUM_CRYPTO_PWHASH_MEMLIMIT_MODERATE: 268435456
+    // SODIUM_CRYPTO_PWHASH_OPSLIMIT_SENSITIVE: 4
     if (await isLowSpecDevice()) {
       logger.info("low spec device detected");
       memLimit = sodium.crypto.pwhash.memLimitModerate;
