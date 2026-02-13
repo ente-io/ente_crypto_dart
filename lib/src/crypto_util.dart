@@ -47,9 +47,8 @@ Uint8List cryptoSecretboxOpenEasy(
 
 Uint8List cryptoPwHash(Uint8List password, Uint8List salt, int memLimit,
     int opsLimit, dynamic sodium) {
-  return (sodium as Sodium)
+  return (sodium as SodiumSumo)
       .crypto
-      // ignore: deprecated_member_use
       .pwhash
       .call(
         outLen: sodium.crypto.secretBox.keyBytes,
@@ -72,7 +71,7 @@ Uint8List cryptoKdfDeriveFromKey(
   return sodium.crypto.kdf
       .deriveFromKey(
         subkeyLen: subkeyLen,
-        subkeyId: subkeyId,
+        subkeyId: BigInt.from(subkeyId),
         context: context,
         masterKey: SecureKey.fromList(sodium, key),
       )
@@ -581,9 +580,13 @@ class CryptoUtil {
     Uint8List source,
     Uint8List key,
   ) async {
-    return await sodium.runIsolated(
-      (sodium, secureKeys, keyPairs) => chachaEncryptData(source, key, sodium),
+    final result = await sodium.runIsolated(
+      (sodium, secureKeys, keyPairs) async {
+        final encryptedResult = await chachaEncryptData(source, key, sodium);
+        return encryptedResult.toIsolateMap();
+      },
     );
+    return EncryptionResult.fromIsolateMap(result);
   }
 
   // Decrypts the given source, with the given key and header using XChaCha20
@@ -605,9 +608,19 @@ class CryptoUtil {
     String sourceFilePath,
     String destinationFilePath, {
     Uint8List? key,
-  }) {
-    return sodium.runIsolated((sodium, secureKeys, keyPairs) =>
-        chachaEncryptFile(sourceFilePath, destinationFilePath, key, sodium));
+  }) async {
+    final result = await sodium.runIsolated(
+      (sodium, secureKeys, keyPairs) async {
+        final encryptedResult = await chachaEncryptFile(
+          sourceFilePath,
+          destinationFilePath,
+          key,
+          sodium,
+        );
+        return encryptedResult.toIsolateMap();
+      },
+    );
+    return EncryptionResult.fromIsolateMap(result);
   }
 
   // Encrypts the file with MD5 calculation and real-time verification
@@ -616,16 +629,20 @@ class CryptoUtil {
     String destinationFilePath, {
     Uint8List? key,
     int? multiPartChunkSizeInBytes,
-  }) {
-    return sodium.runIsolated(
-      (sodium, secureKeys, keyPairs) => chachaEncryptFileWithVerification(
-        sourceFilePath,
-        destinationFilePath,
-        key,
-        multiPartChunkSizeInBytes,
-        sodium,
-      ),
+  }) async {
+    final result = await sodium.runIsolated(
+      (sodium, secureKeys, keyPairs) async {
+        final encryptedResult = await chachaEncryptFileWithVerification(
+          sourceFilePath,
+          destinationFilePath,
+          key,
+          multiPartChunkSizeInBytes,
+          sodium,
+        );
+        return encryptedResult.toIsolateMap();
+      },
     );
+    return FileEncryptResult.fromIsolateMap(result);
   }
 
   // Decrypts the file at sourceFilePath, with the given key and header using
@@ -638,7 +655,12 @@ class CryptoUtil {
   ) {
     return sodium.runIsolated(
       (sodium, secureKeys, keyPairs) => chachaDecryptFile(
-          sourceFilePath, destinationFilePath, header, key, sodium),
+        sourceFilePath,
+        destinationFilePath,
+        header,
+        key,
+        sodium,
+      ),
     );
   }
 
@@ -692,19 +714,26 @@ class CryptoUtil {
     final int desiredStrength = sodium.crypto.pwhash.memLimitSensitive *
         sodium.crypto.pwhash.opsLimitSensitive;
 
-    // When sensitive memLimit (1 GB) is used, on low spec device the OS might
-    // kill the app with OOM. To avoid that, start with 256 MB and
-    // corresponding ops limit (16).
-    // This ensures that the product of these two variables
-    // (the area under the graph that determines the amount of work required)
-    // stays the same
+    // Flutter-client default: start at libsodium's sensitive params on capable
+    // devices, then fallback to lower memory/higher ops as needed.
+    // This preserves compatibility with existing Flutter app expectations while
+    // still maintaining the same overall work factor for fallback attempts.
+    int memLimit = sodium.crypto.pwhash.memLimitSensitive;
+    int opsLimit = sodium.crypto.pwhash.opsLimitSensitive;
+
+    // When sensitive memLimit (1 GB) is used, low spec devices can hit OOM.
+    // Start with 256 MB and a proportional ops limit (16) so the work product
+    // stays the same.
     // SODIUM_CRYPTO_PWHASH_MEMLIMIT_SENSITIVE: 1073741824
     // SODIUM_CRYPTO_PWHASH_MEMLIMIT_MODERATE: 268435456
     // SODIUM_CRYPTO_PWHASH_OPSLIMIT_SENSITIVE: 4
-    int memLimit = sodium.crypto.pwhash.memLimitModerate;
-    final factor = sodium.crypto.pwhash.memLimitSensitive ~/
-        sodium.crypto.pwhash.memLimitModerate; // = 4
-    int opsLimit = sodium.crypto.pwhash.opsLimitSensitive * factor; // = 16
+    if (await isLowSpecDevice()) {
+      logger.info("low spec device detected");
+      memLimit = sodium.crypto.pwhash.memLimitModerate;
+      final factor = sodium.crypto.pwhash.memLimitSensitive ~/
+          sodium.crypto.pwhash.memLimitModerate;
+      opsLimit = sodium.crypto.pwhash.opsLimitSensitive * factor;
+    }
 
     if (memLimit * opsLimit != desiredStrength) {
       throw UnsupportedError(
