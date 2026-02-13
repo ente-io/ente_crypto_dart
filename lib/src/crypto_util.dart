@@ -714,8 +714,10 @@ class CryptoUtil {
     final int desiredStrength = sodium.crypto.pwhash.memLimitSensitive *
         sodium.crypto.pwhash.opsLimitSensitive;
 
-    // Keep the effective Argon2 work factor constant initially and fallback to
-    // lower memory, higher ops for low-spec devices.
+    // Flutter-client default: start at libsodium's sensitive params on capable
+    // devices, then fallback to lower memory/higher ops as needed.
+    // This preserves compatibility with existing Flutter app expectations while
+    // still maintaining the same overall work factor for fallback attempts.
     int memLimit = sodium.crypto.pwhash.memLimitSensitive;
     int opsLimit = sodium.crypto.pwhash.opsLimitSensitive;
 
